@@ -1,0 +1,7 @@
+streamlit
+python-dotenv
+requests
+fpdf2
+
+# To run the Streamlit app:
+# streamlit run app.py
