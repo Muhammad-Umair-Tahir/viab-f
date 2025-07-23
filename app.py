@@ -94,20 +94,21 @@ def check_backend_health():
         return False
 
 # --------- SIDEBAR ---------
+# Initialize a file uploader key if it doesn't exist
+if "file_uploader_key" not in st.session_state:
+    st.session_state["file_uploader_key"] = "file_upload_0"
+
+# Check if we need to clear files from previous run
+if "clear_uploaded_files" in st.session_state and st.session_state["clear_uploaded_files"]:
+    # Reset the flag
+    st.session_state["clear_uploaded_files"] = False
+    # Generate a new key for the file uploader to clear it
+    st.session_state["file_uploader_key"] = f"file_upload_{uuid.uuid4()}"
+    
 with st.sidebar:
     st.header("Project & Controls")
 
-    # File upload
-    uploaded_files = st.file_uploader(
-        "Architectural files (PDF, image, etc):",
-        type=["pdf", "jpg", "jpeg", "png", "bmp", "gif", "webp"],
-        accept_multiple_files=True,
-        key="file_upload"
-    )
-
-    st.markdown("---")
-
-    # User and session IDs
+    # User and session IDs - MOVED UP before being used
     user_input_id = st.text_input("User ID (blank = random):", value="", key="user_id_input")
     session_input_id = st.text_input("Session ID (blank = random):", value="", key="session_id_input")
 
@@ -126,6 +127,32 @@ with st.sidebar:
             st.session_state["session_id"] = str(uuid.uuid4())
         session_id = st.session_state["session_id"]
 
+    # File upload with DYNAMIC key that changes when we want to clear it
+    uploaded_files = st.file_uploader(
+        "Architectural files (PDF, image, etc):",
+        type=["pdf", "jpg", "jpeg", "png", "bmp", "gif", "webp"],
+        accept_multiple_files=True,
+        key=st.session_state["file_uploader_key"]  # Use the dynamic key
+    )
+    
+    # Display upload button only when files are uploaded
+    if uploaded_files:
+        if st.button("Upload Files Only"):
+            with st.spinner("Uploading files..."):
+                bot_msg = send_to_workflow(
+                    msg="",  # No message, just files
+                    files=uploaded_files,
+                    user_id=user_id,
+                    session_id=session_id
+                )
+                st.session_state["chat_messages"].append({"role": "assistant", "msg": bot_msg})
+                # Set flag to clear files on next rerun instead of modifying directly
+                st.session_state["clear_uploaded_files"] = True
+            st.rerun()
+
+    st.markdown("---")
+
+    # Display user and session IDs
     st.text(f"User: {user_id[:8]}")
     st.text(f"Session: {session_id[:8]}")
 
@@ -153,19 +180,6 @@ with st.sidebar:
     else:
         st.error("🔴 Backend API Offline")
         st.caption("Make sure the backend server is running on localhost:8000")
-
-# Add this in your sidebar after file_uploader
-if uploaded_files:
-    if st.button("Upload Files Only"):
-        with st.spinner("Uploading files..."):
-            bot_msg = send_to_workflow(
-                msg="",  # No message, just files
-                files=uploaded_files,
-                user_id=user_id,
-                session_id=session_id
-            )
-            st.session_state["chat_messages"].append({"role": "assistant", "msg": bot_msg})
-        st.rerun()
 
 # --------- CHAT HISTORY ---------
 if "chat_messages" not in st.session_state:
@@ -197,7 +211,11 @@ if user_msg is not None:
             session_id=session_id
         )
         st.session_state["chat_messages"].append({"role": "assistant", "msg": bot_msg})
-
+        
+        # Set flag to clear files on next rerun
+        if uploaded_files:
+            st.session_state["clear_uploaded_files"] = True
+    
     st.rerun()
 
 st.markdown("---")
